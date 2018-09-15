@@ -1,0 +1,26 @@
+#!/usr/bin/python
+
+import sys, csv
+from common import *
+
+with open_default_db() as d:
+    print('Domain,Project,Task,Details,Start,End,TimeZone,Duration,Decimal Duration,Project-Extra-1,Project-Extra-2,Task-Extra-1,Task-Extra-2')
+    writer = csv.writer(sys.stdout)
+    for e in d.get_entries():
+        dur = e.end - e.start
+        dur_t_s = int(dur.total_seconds())
+        dur_t_h = dur_t_s // 3600
+        dur_s   = dur_t_s %  3600
+        dur_txt = '{}:{:02}'.format(dur_t_h, dur_s%60)
+        dur_dec = dur_t_h + dur_s/3600
+        writer.writerow([
+            e.client,
+            e.project,
+            'work',
+            '',
+            e.start.replace(tzinfo=None),
+            e.end.replace(tzinfo=None),
+            e.start.tzname(),
+            dur_txt,
+            dur_dec,
+            '', '', '', '' ])

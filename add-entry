@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+
+import argparse
+import datetime as dt
+from common import *
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--client', '-c', required=True)
+parser.add_argument('--project', '-p', required=True)
+parser.add_argument('--start', '-s', required=True)
+parser.add_argument('--end', '-e', required=True)
+parser.add_argument('--extra', '-x')
+args = parser.parse_args()
+
+with open_default_db() as d:
+    start = dt.datetime.fromisoformat(args.start).astimezone()
+    end   = dt.datetime.fromisoformat(args.end).astimezone()
+    entry = Entry(args.client, args.project, start, end, args.extra)
+    try:
+        d.add_entry(entry)
+    except OverlappingEntriesError as e:
+        e.print_error()

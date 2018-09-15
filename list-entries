@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+import sys, csv
+import argparse
+from common import *
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--select',  '-s', help='Arguments to WHERE clause')
+parser.add_argument('--order',   '-o', help='Arguments to ORDER BY clause')
+parser.add_argument('--limit',   '-l', help='Arguments to LIMIT clause')
+parser.add_argument('--reverse', '-r', action='store_true')
+parser.add_argument('--query',   '-q', help='Full SQL query (ignore other SQL parameters)')
+parser.add_argument('--format',  '-f', choices=['table', 'csv'])
+args = parser.parse_args()
+args_dict = vars(args)
+
+with open_default_db() as d:
+    printfn = print_entries
+    if args.format == 'csv':
+        printfn = print_entries_csv
+    sql_args = dict([ (k, args_dict[k])
+        for k in 'select order limit query reverse'.split()
+        if args_dict[k] != None ])
+    printfn(d.get_entries(**sql_args))
