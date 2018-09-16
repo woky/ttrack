@@ -2,23 +2,186 @@
 
 import sys, csv
 import argparse
+import datetime as dt
+import calendar
+import itertools
+from dateutil.relativedelta import *
+from tabulate import tabulate
 from common import *
+from collections import namedtuple
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--select',  '-s', help='Arguments to WHERE clause')
-parser.add_argument('--order',   '-o', help='Arguments to ORDER BY clause')
-parser.add_argument('--limit',   '-l', help='Arguments to LIMIT clause')
-parser.add_argument('--reverse', '-r', action='store_true')
-parser.add_argument('--query',   '-q', help='Full SQL query (ignore other SQL parameters)')
-parser.add_argument('--format',  '-f', choices=['table', 'csv'])
+parser.add_argument('--format',      '-f', choices=['table', 'csv'], default='table')
+parser.add_argument('--client',      '-c')
+parser.add_argument('--project',     '-p')
+parser.add_argument('--year',        '-y', type=int)
+parser.add_argument('--month',       '-m', type=int, action='append', nargs='?', default=[])
+parser.add_argument('--week',        '-w', type=int, action='append', nargs='?', default=[])
+parser.add_argument('--dayhours',    '-d', action='store_true')
+parser.add_argument('--redact',      '-r', action='store_true')
+parser.add_argument('--empty',       '-E', action='store_true')
+parser.add_argument('--blankzero',   '-B', action='store_true')
+parser.add_argument('--splitweeks',  '-W', action='store_true')
+parser.add_argument('--splitmonths', '-M', action='store_true')
 args = parser.parse_args()
-args_dict = vars(args)
 
-with open_default_db() as d:
-    printfn = print_entries
-    if args.format == 'csv':
-        printfn = print_entries_csv
-    sql_args = dict([ (k, args_dict[k])
-        for k in 'select order limit query reverse'.split()
-        if args_dict[k] != None ])
-    printfn(d.get_entries(**sql_args))
+Column = namedtuple('Column', [ 'name', 'alignment' ])
+columns = dict([ (c.name, c) for c in [
+    Column('Id',      'right'),
+    Column('Date',    'left'),
+    Column('CW',      'right'),
+    Column('DoW',     'left'),
+    Column('In',      'right'),
+    Column('Out',     'right'),
+    Column('Hours',   'right'),
+    Column('H:MM',    'right'),
+    Column('Client',  'left'),
+    Column('Project', 'left'),
+    Column('Extra',   'left'),
+]])
+
+class Printer:
+
+    def __init__(self, all_col_names, req_col_names, elem_to_row, elem_to_date):
+        name_to_idx = dict([ (n, i) for i, n in enumerate(all_col_names) ])
+        self.req_idxs = [ name_to_idx[n] for n in req_col_names if n in name_to_idx ]
+        self.header = self.project_row(all_col_names)
+        self.elem_to_row = elem_to_row
+        self.elem_to_date = elem_to_date
+
+    def project_row(self, row):
+        return [ row[i] for i in self.req_idxs ]
+
+    def create_table_rows(self, elems):
+        rows = []
+        for e1, e2 in itertools.zip_longest(elems, elems[1:]):
+            rows.append(self.project_row(self.elem_to_row(e1)))
+            separated = False
+            if not e2:
+                continue
+            if args.splitweeks and not separated:
+                w1 = self.elem_to_date(e1).isocalendar()[1]
+                w2 = self.elem_to_date(e2).isocalendar()[1]
+                if w1 != w2:
+                    rows.append([])
+                    separated = True
+            if args.splitmonths and not separated:
+                m1 = self.elem_to_date(e1).month
+                m2 = self.elem_to_date(e2).month
+                if m1 != m2:
+                    rows.append([])
+                    separated = True
+        return rows
+
+    def print_table(self, elems):
+        rows = self.create_table_rows(elems)
+        kwargs = {}
+        kwargs['floatfmt'] = '.2f'
+        kwargs['headers'] = self.header
+        # https://bitbucket.org/astanin/python-tabulate/issues/155
+        if rows:
+            kwargs['colalign'] = [ columns[n].alignment for n in self.header ]
+        print(tabulate(rows, **kwargs))
+
+    def print_csv(self, elems):
+        writer = csv.writer(sys.stdout)
+        writer.writerow(self.header)
+        for e in elems:
+            writer.writerow(self.project_row(self.elem_to_row(e)))
+
+    def print(self, elems):
+        if args.format == 'csv':
+            self.print_csv(elems)
+        elif args.format == 'table':
+            self.print_table(elems)
+        else:
+            raise ValueError()
+
+ENTRIES_COLUMNS  = 'Id,Date,CW,DoW,In,Out,Hours,H:MM,Client,Project,Extra'.split(',')
+DAYHOURS_COLUMNS = 'Date,CW,DoW,Hours,H:MM,Client,Project'.split(',')
+
+def format_hours(delta):
+    t_s = int(delta.total_seconds())
+    if t_s > 0 or not args.blankzero:
+        h_dec = round(t_s / 3600, 2)
+        m     = int(round((t_s % 3600) / 60, 0))
+        h_min = '{}:{:02}'.format(int(h_dec), m)
+    else:
+        h_dec = ''
+        h_min = ''
+    return (h_dec, h_min)
+
+def create_row_entry(e):
+    (h_dec, h_min) = format_hours(e.end - e.start)
+    return [
+        e.id,
+        e.start.date(),
+        e.start.strftime('%V'),
+        e.start.strftime('%a'),
+        e.start.strftime('%H:%M'),
+        e.end.strftime('%H:%M'),
+        h_dec,
+        h_min,
+        e.client,
+        e.project,
+        e.extra
+    ]
+
+def create_row_dayhours(dh):
+    (h_dec, h_min) = format_hours(dh.hours)
+    return [
+        dh.date,
+        dh.date.strftime('%V'),
+        dh.date.strftime('%a'),
+        h_dec,
+        h_min,
+        dh.client,
+        dh.project
+    ]
+
+if args.redact:
+    entries_columns  = 'Date,CW,DoW,In,Out,Hours,H:MM'.split(',')
+    dayhours_columns = 'Date,CW,DoW,Hours,H:MM'.split(',')
+else:
+    entries_columns  = ENTRIES_COLUMNS
+    dayhours_columns = DAYHOURS_COLUMNS
+
+printer_entries = Printer(
+        ENTRIES_COLUMNS,
+        entries_columns,
+        create_row_entry,
+        lambda e: e.start)
+
+printer_dayhours = Printer(
+        DAYHOURS_COLUMNS,
+        dayhours_columns,
+        create_row_dayhours,
+        lambda e: e.date)
+
+with open_default_db() as db:
+    today   = dt.date(args.year, 1, 1) if args.year else dt.date.today()
+    months  = [ month_num_to_date(num or 0, today) for num in args.month ]
+    weeks   = [  week_num_to_date(num or 0, today) for num in args.week ]
+    entries = db.get_entries(args.client, args.project, months, weeks)
+
+    if args.dayhours:
+        dayhours_by_date = DayHours.from_entries(entries)
+
+        if args.empty:
+            dayoff = lambda d: [DayHours('', '', d, dt.timedelta())]
+            for m in months:
+                for i in range(0, calendar.monthrange(m.year, m.month)[1]):
+                    d = m + dt.timedelta(days=i)
+                    if not d in dayhours_by_date:
+                        dayhours_by_date[d] = dayoff(d)
+            for w in weeks:
+                for i in range(0, 7):
+                    d = w + dt.timedelta(days=i)
+                    if not d in dayhours_by_date:
+                        dayhours_by_date[d] = dayoff(d)
+
+        dayhours = list(itertools.chain(*dayhours_by_date.values()))
+        dayhours = sorted(dayhours, key=lambda dh: (dh.date, dh.client, dh.project))
+        printer_dayhours.print(dayhours)
+    else:
+        printer_entries.print(entries)

@@ -1,33 +1,43 @@
 import sqlite3
 import datetime as dt
 import dateutil.tz as dutz
+from dateutil.relativedelta import *
 import sys, typing
 import csv
-from tabulate import tabulate
+from itertools import groupby
 
 def open_default_db():
     return Database('db.sqlite3')
 
-_ENTRY_SHOW_FIELDS  = 'id client project start end extra'.split()
-_ENTRY_SHOW_HEADERS = [ s.capitalize() for s in _ENTRY_SHOW_FIELDS ]
+def month_num_to_date(num, today):
+    if num > 0:
+        d = dt.date(today.year, num, 1)
+    else:
+        d = today.replace(day=1)
+        d += relativedelta(months=num)
+    return d
 
-def print_entries(entries, file=sys.stdout):
-    def entry_to_row(e):
-        d = dict(e._asdict())
-        d['start'] = e.start.astimezone().replace(tzinfo=None)
-        d['end'] = e.end.astimezone().replace(tzinfo=None)
-        return [ d[attr] for attr in _ENTRY_SHOW_FIELDS ]
-    rows = [ entry_to_row(e) for e in entries ]
-    print(tabulate(rows, headers=_ENTRY_SHOW_HEADERS), file=file)
+def week_num_to_date(num, today):
+    if num > 0:
+        d = dt.date(today.year, 1, 4)
+        d += relativedelta(weekday=MO(-1), weeks=(num-1))
+    else:
+        d = today
+        d += relativedelta(weekday=MO(-1), weeks=num)
+    return d
 
-def print_entries_csv(entries, file=sys.stdout):
-    writer = csv.writer(file)
-    writer.writerow(_ENTRY_SHOW_FIELDS)
-    for e in entries:
-        writer.writerow(e.to_row())
+_ENTRY_HEADER = 'Id,Start,End,Client,Project,Extra'.split(',')
+_ENTRY_ALIGN  = 'right left left left left left'.split()
+
+def print_entries(entries, file=sys.stderr):
+    from tabulate import tabulate
+    rows = [ [ e.id, e.start, e.end, e.client, e.project, e.extra ]
+        for e in entries ]
+    print(tabulate(rows, headers=_ENTRY_HEADER, colalign=_ENTRY_ALIGN))
+
+_CSV_COLUMNS  = 'id client project start end extra'.split()
 
 class Entry(typing.NamedTuple):
-
     client: str
     project: str
     start: dt.datetime
@@ -35,8 +45,33 @@ class Entry(typing.NamedTuple):
     extra: str = None
     id: int = None
 
+    @classmethod
+    def write_csv(cls, entries, file=sys.stdout):
+        writer = csv.writer(file)
+        writer.writerow(_CSV_COLUMNS)
+        for e in entries:
+            writer.writerow(e.to_row())
+
     def to_row(self):
-        return [ self._asdict()[attr] for attr in _ENTRY_SHOW_FIELDS ]
+        return [ self._asdict()[attr] for attr in _CSV_COLUMNS ]
+
+class DayHours(typing.NamedTuple):
+    client: str
+    project: str
+    date: dt.date
+    hours: dt.timedelta
+
+    @classmethod
+    def from_entries(cls, entries):
+        return dict([
+            (d, [
+                DayHours(c, p, d, sum(
+                    [ e.end - e.start for e in cpd_es ],
+                    dt.timedelta()))
+                for (c, p), cpd_es in
+                groupby(d_es, lambda e: (e.client, e.project)) ])
+            for d, d_es in
+            groupby(entries, lambda e: e.start.date()) ])
 
 class OverlappingEntriesError(Exception):
 
@@ -46,8 +81,7 @@ class OverlappingEntriesError(Exception):
         self.existing = existing
 
     def print_error(self, file=sys.stderr):
-        print('ERROR: New entry overlaps with existing entries.', file=file)
-        print('New entry:', file=file)
+        print('ERROR: New entry overlaps with existing entries. New entry:', file=file)
         print_entries([self.new_entry])
         print('Existing entries:', file=file)
         print_entries(self.existing)
@@ -56,28 +90,45 @@ class Database:
 
     _DB_VERSION = 1
 
+    _PRAGMAS = '''
+        pragma foreign_keys = on;
+        pragma journal_mode = wal;
+    '''
+
+    _DDL = '''
+        create table if not exists misc (
+            key text primary key,
+            n integer,
+            s text,
+            b blob
+        );
+        create table if not exists clients (
+            id text primary key
+        );
+        create table if not exists projects (
+            id text not null,
+            client text not null references clients (id),
+            primary key (id, client)
+        );
+        create table if not exists entries (
+            id integer primary key,
+            client text not null,
+            project text not null,
+            start text not null,
+            end text not null check (end >= start),
+            extra text,
+            foreign key (project, client) references projects (id, client)
+        );
+    '''
+
     def __init__(self, db_path):
         self.db_path = db_path
 
     def __enter__(self):
         self.db = sqlite3.connect(self.db_path)
         self.db.row_factory = sqlite3.Row
-        self.db.executescript('''
-            create table if not exists misc (
-                key text primary key,
-                n integer,
-                s text,
-                b blob
-            );
-            create table if not exists entries (
-                id integer primary key,
-                client text not null,
-                project text not null,
-                start text not null,
-                end text not null check (end >= start),
-                extra text
-            );
-        ''')
+        self.db.executescript(self._PRAGMAS)
+        self.db.executescript(self._DDL)
         self.db.execute(
                 "insert or ignore into misc (key, n) values ('version', ?)",
                 [ self._DB_VERSION ])
@@ -100,28 +151,38 @@ class Database:
     def _rows_to_entries(self, rows):
         return [ self._row_to_entry(r) for r in rows ]
 
-    def _select_entries(self, query, args = []):
+    def get_entries_for_query(self, query, args=[]):
         return self._rows_to_entries(self.db.execute(query, args).fetchall())
 
-    def get_entries(self, select=None, order=None, limit=None, query=None,
-            reverse=False):
-        if not query:
-            query = 'select * from entries'
-            if select:
-                query += ' where ' + select
-            if order:
-                query += ' order by ' + order
-            else:
-                query += ' order by start'
-                if reverse:
-                    query += ' desc'
-            if limit:
-                query += ' limit ' + limit
-        #print(query)
-        return self._select_entries(query)
+    def get_entries(self, client=None, project=None, months=[], weeks=[]):
+        conj_clauses = [['1=1']]
+        args = []
+
+        if client:
+            conj_clauses += [['client like ?']]
+            args += [client]
+        if project:
+            conj_clauses += [['project like ?']]
+            args += [project]
+
+        period_clauses = []
+        for w in weeks:
+            period_clauses += ["strftime('%Y %W', start) = ?"]
+            args += [ w.strftime('%Y %V') ]
+        for m in months:
+            period_clauses += ["strftime('%Y %m', start) = ?"]
+            args += [ m.strftime('%Y %m') ]
+        if period_clauses:
+            conj_clauses += [period_clauses]
+
+        selection = ' and '.join(
+                [ '(' + ' or '.join(disj) + ')' for disj in conj_clauses ])
+        query = f'select * from entries where {selection} order by start'
+        #print(query); print(args)
+        return self.get_entries_for_query(query, args)
 
     def get_overlapping_entries(self, start, end):
-        return self._select_entries(
+        return self.get_entries_for_query(
                 '''select * from entries where
                    datetime(start) < datetime(?) and
                    datetime(end)   > datetime(?)''',

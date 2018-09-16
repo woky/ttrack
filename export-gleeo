@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 import sys, csv
 from common import *
@@ -16,7 +16,7 @@ with open_default_db() as d:
         writer.writerow([
             e.client,
             e.project,
-            'work',
+            e.project,
             '',
             e.start.replace(tzinfo=None),
             e.end.replace(tzinfo=None),

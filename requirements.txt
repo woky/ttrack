@@ -1,2 +1,3 @@
 python-dateutil
-tabulate
+#tabulate
+git+https://bitbucket.org/astanin/python-tabulate.git#tabulate
