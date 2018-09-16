@@ -186,7 +186,9 @@ class Database:
 
         selection = ' and '.join(
                 [ '(' + ' or '.join(disj) + ')' for disj in conj_clauses ])
-        query = f'select * from entries where {selection} order by start'
+        query = f'''
+            select * from entries where {selection}
+            order by start, client, project'''
         #print(query); print(args)
         return self.get_entries_for_query(query, args)
 
