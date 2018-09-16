@@ -5,18 +5,31 @@ import datetime as dt
 from common import *
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--client', '-c', required=True)
-parser.add_argument('--project', '-p', required=True)
-parser.add_argument('--start', '-s', required=True)
-parser.add_argument('--end', '-e', required=True)
-parser.add_argument('--extra', '-x')
+parser.add_argument('--client',           '-c', required=True)
+parser.add_argument('--project',          '-p', required=True)
+parser.add_argument('--start',            '-s', required=True)
+parser.add_argument('--end',              '-e', required=True)
+parser.add_argument('--extra',            '-x')
+parser.add_argument('--silence-warnings', '-S', action='store_true')
+parser.add_argument('--quiet',            '-q', action='count', default=0)
 args = parser.parse_args()
+
+ret = 0
 
 with open_default_db() as d:
     start = dt.datetime.fromisoformat(args.start).astimezone()
     end   = dt.datetime.fromisoformat(args.end).astimezone()
     entry = Entry(args.client, args.project, start, end, args.extra)
     try:
-        d.add_entry(entry)
+        entry = d.add_entry(entry)
     except OverlappingEntriesError as e:
-        e.print_error()
+        if not args.silence_warnings:
+            print('ERROR', file=sys.stderr)
+            e.print_error()
+        ret = 1
+
+    if not args.quiet:
+        print('Imported entry:')
+        print_entries(imported, file=sys.stdout)
+
+    sys.exit(ret)

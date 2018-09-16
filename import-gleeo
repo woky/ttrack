@@ -7,13 +7,12 @@ import dateutil.tz as dutz
 from common import *
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--silence-warnings', '-s', action='store_true')
+parser.add_argument('--silence-warnings', '-S', action='store_true')
 parser.add_argument('--quiet',            '-q', action='count', default=0)
 parser.add_argument('files', nargs='*')
 args = parser.parse_args()
 
-if args.quiet:
-    args.silence_warnings = True
+ret = 0
 
 with open_default_db() as d, fileinput.input(args.files) as input:
     reader = csv.reader(input)
@@ -37,7 +36,11 @@ with open_default_db() as d, fileinput.input(args.files) as input:
                 print('WARNING', file=sys.stderr)
                 e.print_error()
                 print(file=sys.stderr)
+            ret = 1
+
     if args.quiet < 2:
-        print('Entries imported: ' + str(num_imported))
+        print('Imported {} entries'.format(num_imported))
         if num_imported and args.quiet < 1:
             print_entries(imported, file=sys.stdout)
+
+    sys.exit(ret)
