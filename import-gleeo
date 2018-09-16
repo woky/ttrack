@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
 
+import argparse
 import sys, fileinput, csv
 import datetime as dt
 import dateutil.tz as dutz
 from common import *
 
-with open_default_db() as d, fileinput.input() as input:
+parser = argparse.ArgumentParser()
+parser.add_argument('--silence-warnings', '-s', action='store_true')
+parser.add_argument('--quiet',            '-q', action='count', default=0)
+parser.add_argument('files', nargs='*')
+args = parser.parse_args()
+
+if args.quiet:
+    args.silence_warnings = True
+
+with open_default_db() as d, fileinput.input(args.files) as input:
     reader = csv.reader(input)
     next(reader, None)
+    imported = []
+    num_imported = 0
     for line in reader:
         client, project, _, _, start_txt, end_txt, tz_txt, *_ = line
         tz    = dutz.gettz(tz_txt)
@@ -15,7 +27,17 @@ with open_default_db() as d, fileinput.input() as input:
         end   = dt.datetime.fromisoformat(end_txt).astimezone(tz)
         entry = Entry(client, project, start, end)
         try:
-            d.add_entry(entry)
+            entry = d.add_entry(entry)
+            if args.quiet < 2:
+                num_imported += 1
+                if args.quiet < 1:
+                    imported.append(entry)
         except OverlappingEntriesError as e:
-            e.print_error()
-            print(file=sys.stderr)
+            if not args.silence_warnings:
+                print('WARNING', file=sys.stderr)
+                e.print_error()
+                print(file=sys.stderr)
+    if args.quiet < 2:
+        print('Entries imported: ' + str(num_imported))
+        if num_imported and args.quiet < 1:
+            print_entries(imported, file=sys.stdout)

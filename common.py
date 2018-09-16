@@ -81,7 +81,7 @@ class OverlappingEntriesError(Exception):
         self.existing = existing
 
     def print_error(self, file=sys.stderr):
-        print('ERROR: New entry overlaps with existing entries. New entry:', file=file)
+        print('New entry overlaps with existing entries. New entry:', file=file)
         print_entries([self.new_entry])
         print('Existing entries:', file=file)
         print_entries(self.existing)
@@ -192,7 +192,12 @@ class Database:
         existing = self.get_overlapping_entries(entry.start, entry.end)
         if existing:
             raise OverlappingEntriesError(entry, existing)
-        self.db.execute(
-                '''insert into entries (client, project, start, end, extra)
-                   values (:client, :project, :start, :end, :extra)''',
+        c = self.db.cursor()
+        try:
+            c.execute('''
+                insert into entries (client, project, start, end, extra)
+                values (:client, :project, :start, :end, :extra)''',
                 entry._asdict())
+            return entry._replace(id=c.lastrowid)
+        finally:
+            c.close()
