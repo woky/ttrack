@@ -81,9 +81,9 @@ class OverlappingEntriesError(Exception):
         self.existing = existing
 
     def print_error(self, file=sys.stderr):
-        print('New entry overlaps with existing entries. New entry:', file=file)
+        print('New entry:', file=file)
         print_entries([self.new_entry])
-        print('Existing entries:', file=file)
+        print('Overlapping entries:', file=file)
         print_entries(self.existing)
 
 class Database:
@@ -188,10 +188,11 @@ class Database:
                    datetime(end)   > datetime(?)''',
                 [ end, start ])
 
-    def add_entry(self, entry):
-        existing = self.get_overlapping_entries(entry.start, entry.end)
-        if existing:
-            raise OverlappingEntriesError(entry, existing)
+    def add_entry(self, entry, force=False):
+        if not force:
+            existing = self.get_overlapping_entries(entry.start, entry.end)
+            if existing:
+                raise OverlappingEntriesError(entry, existing)
         c = self.db.cursor()
         try:
             c.execute('''

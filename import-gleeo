@@ -43,4 +43,4 @@ with open_default_db() as d, fileinput.input(args.files) as input:
         if num_imported and args.quiet < 1:
             print_entries(imported, file=sys.stdout)
 
-    sys.exit(ret)
+sys.exit(ret)

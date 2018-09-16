@@ -11,19 +11,31 @@ from common import *
 from collections import namedtuple
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--format',      '-f', choices=['table', 'csv'], default='table')
-parser.add_argument('--client',      '-c')
-parser.add_argument('--project',     '-p')
-parser.add_argument('--year',        '-y', type=int)
-parser.add_argument('--month',       '-m', type=int, action='append', nargs='?', default=[])
-parser.add_argument('--week',        '-w', type=int, action='append', nargs='?', default=[])
-parser.add_argument('--dayhours',    '-d', action='store_true')
-parser.add_argument('--redact',      '-r', action='store_true')
-parser.add_argument('--empty',       '-E', action='store_true')
-parser.add_argument('--blankzero',   '-B', action='store_true')
-parser.add_argument('--splitweeks',  '-W', action='store_true')
-parser.add_argument('--splitmonths', '-M', action='store_true')
+parser.add_argument('--format',       '-f', choices=['table', 'csv'], default='table')
+parser.add_argument('--project',      '-p', metavar='CLIENT%[/PROJECT%]')
+parser.add_argument('--year',         '-y', type=int)
+parser.add_argument('--month',        '-m', type=int, action='append', nargs='?', default=[])
+parser.add_argument('--week',         '-w', type=int, action='append', nargs='?', default=[])
+parser.add_argument('--day-hours',    '-d', action='store_true')
+parser.add_argument('--redact',       '-r', action='store_true')
+parser.add_argument('--days-off',     '-o', action='store_true')
+parser.add_argument('--show-zeros',   '-z', action='store_true')
+parser.add_argument('--split-weeks',  '-W', action='store_true')
+parser.add_argument('--split-months', '-M', action='store_true')
+parser.add_argument('--totals',       '-t', action='store_true')
 args = parser.parse_args()
+
+def format_hours(delta):
+    t_s = int(delta.total_seconds())
+    if t_s > 0 or args.show_zeros:
+        h = round(t_s / 3600, 2)
+        m = int(round((t_s % 3600) / 60, 0))
+        h_dec = '{:.2f}'.format(h)
+        h_min = '{:2}:{:02}'.format(int(h), m)
+    else:
+        h_dec = ''
+        h_min = ''
+    return (h_dec, h_min)
 
 Column = namedtuple('Column', [ 'name', 'alignment' ])
 columns = dict([ (c.name, c) for c in [
@@ -42,12 +54,13 @@ columns = dict([ (c.name, c) for c in [
 
 class Printer:
 
-    def __init__(self, all_col_names, req_col_names, elem_to_row, elem_to_date):
+    def __init__(self, all_col_names, req_col_names, elem_to_row, elem_to_date, elem_to_delta):
         name_to_idx = dict([ (n, i) for i, n in enumerate(all_col_names) ])
         self.req_idxs = [ name_to_idx[n] for n in req_col_names if n in name_to_idx ]
         self.header = self.project_row(all_col_names)
         self.elem_to_row = elem_to_row
         self.elem_to_date = elem_to_date
+        self.elem_to_delta = elem_to_delta
 
     def project_row(self, row):
         return [ row[i] for i in self.req_idxs ]
@@ -59,13 +72,13 @@ class Printer:
             separated = False
             if not e2:
                 continue
-            if args.splitweeks and not separated:
+            if args.split_weeks and not separated:
                 w1 = self.elem_to_date(e1).isocalendar()[1]
                 w2 = self.elem_to_date(e2).isocalendar()[1]
                 if w1 != w2:
                     rows.append([])
                     separated = True
-            if args.splitmonths and not separated:
+            if args.split_months and not separated:
                 m1 = self.elem_to_date(e1).month
                 m2 = self.elem_to_date(e2).month
                 if m1 != m2:
@@ -83,6 +96,13 @@ class Printer:
             kwargs['colalign'] = [ columns[n].alignment for n in self.header ]
         print(tabulate(rows, **kwargs))
 
+        if args.totals:
+            hours = sum([ self.elem_to_delta(e) for e in elems ], dt.timedelta())
+            (h_dec, h_min) = format_hours(hours)
+            print()
+            print('Total hours = {} / {}'.format(h_dec, h_min))
+
+
     def print_csv(self, elems):
         writer = csv.writer(sys.stdout)
         writer.writerow(self.header)
@@ -99,17 +119,6 @@ class Printer:
 
 ENTRIES_COLUMNS  = 'Id,Date,CW,DoW,In,Out,Hours,H:MM,Client,Project,Extra'.split(',')
 DAYHOURS_COLUMNS = 'Date,CW,DoW,Hours,H:MM,Client,Project'.split(',')
-
-def format_hours(delta):
-    t_s = int(delta.total_seconds())
-    if t_s > 0 or not args.blankzero:
-        h_dec = round(t_s / 3600, 2)
-        m     = int(round((t_s % 3600) / 60, 0))
-        h_min = '{}:{:02}'.format(int(h_dec), m)
-    else:
-        h_dec = ''
-        h_min = ''
-    return (h_dec, h_min)
 
 def create_row_entry(e):
     (h_dec, h_min) = format_hours(e.end - e.start)
@@ -150,24 +159,34 @@ printer_entries = Printer(
         ENTRIES_COLUMNS,
         entries_columns,
         create_row_entry,
-        lambda e: e.start)
+        lambda e: e.start,
+        lambda e: e.end - e.start)
 
 printer_dayhours = Printer(
         DAYHOURS_COLUMNS,
         dayhours_columns,
         create_row_dayhours,
-        lambda e: e.date)
+        lambda e: e.date,
+        lambda e: e.hours)
 
 with open_default_db() as db:
-    today   = dt.date(args.year, 1, 1) if args.year else dt.date.today()
-    months  = [ month_num_to_date(num or 0, today) for num in args.month ]
-    weeks   = [  week_num_to_date(num or 0, today) for num in args.week ]
-    entries = db.get_entries(args.client, args.project, months, weeks)
+    today  = dt.date(args.year, 1, 1) if args.year else dt.date.today()
+    months = [ month_num_to_date(num or 0, today) for num in args.month ]
+    weeks  = [  week_num_to_date(num or 0, today) for num in args.week ]
 
-    if args.dayhours:
+    client, project = None, None
+    if args.project:
+        if '/' in args.project:
+            (client, project) = args.project.split('/')
+        else:
+            client = args.project
+
+    entries = db.get_entries(client, project, months, weeks)
+
+    if args.day_hours:
         dayhours_by_date = DayHours.from_entries(entries)
 
-        if args.empty:
+        if args.days_off:
             dayoff = lambda d: [DayHours('', '', d, dt.timedelta())]
             for m in months:
                 for i in range(0, calendar.monthrange(m.year, m.month)[1]):

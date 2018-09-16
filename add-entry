@@ -5,31 +5,61 @@ import datetime as dt
 from common import *
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--client',           '-c', required=True)
-parser.add_argument('--project',          '-p', required=True)
-parser.add_argument('--start',            '-s', required=True)
-parser.add_argument('--end',              '-e', required=True)
-parser.add_argument('--extra',            '-x')
-parser.add_argument('--silence-warnings', '-S', action='store_true')
-parser.add_argument('--quiet',            '-q', action='count', default=0)
+parser.add_argument('--project',    '-p', required=True, metavar='CLIENT/PROJECT')
+parser.add_argument('--date-hours', '-d', nargs=2)
+parser.add_argument('--start',      '-s')
+parser.add_argument('--end',        '-e')
+parser.add_argument('--extra',      '-x')
+parser.add_argument('--quiet',      '-q', action='count', default=0)
+parser.add_argument('--force',      '-f', action='store_true')
 args = parser.parse_args()
 
-ret = 0
+with open_default_db() as db:
 
-with open_default_db() as d:
-    start = dt.datetime.fromisoformat(args.start).astimezone()
-    end   = dt.datetime.fromisoformat(args.end).astimezone()
-    entry = Entry(args.client, args.project, start, end, args.extra)
+    (client, project) = args.project.split('/')
+
+    if args.start and args.end:
+        dt1 = dt.datetime.fromisoformat(args.start)
+        dt1 = dt.datetime.fromisoformat(args.end)
+    elif args.date_hours:
+        d = dt.date.fromisoformat(args.date_hours[0])
+        if '+' in args.date_hours[1]:
+            t1_str, d_t_str = args.date_hours[1].split('+')
+            t1  = dt.datetime.strptime(t1_str, '%H:%M').time()
+            dt1 = dt.datetime.combine(d, t1)
+            if ':' in d_t_str:
+                (d_h, d_m) = (int(s or 0) for s in d_t_str.split(':'))
+                dt2 = dt1 + dt.timedelta(hours=d_h, minutes=d_m)
+            else:
+                dt2 = dt1 + dt.timedelta(hours=float(d_t_str))
+        else:
+            t1_str, t2_str = args.date_hours[1].split('-')
+            t1  = dt.datetime.strptime(t1_str, '%H:%M').time()
+            t2  = dt.datetime.strptime(t2_str, '%H:%M').time()
+            dt1 = dt.datetime.combine(d, t1)
+            dt2 = dt.datetime.combine(d, t2)
+            if dt1 > dt2:
+                dt2 += dt.timedelta(days=1)
+    else:
+        parser.error('Either --start and --end, or --date-hours is required')
+
+    if dt1 > dt2:
+        parser.error('start > end')
+
+    dt1 = dt1.astimezone()
+    dt2 = dt2.astimezone()
+
+    entry = Entry(client, project, dt1, dt2, args.extra)
+
     try:
-        entry = d.add_entry(entry)
+        entry = db.add_entry(entry, force=args.force)
     except OverlappingEntriesError as e:
-        if not args.silence_warnings:
-            print('ERROR', file=sys.stderr)
-            e.print_error()
-        ret = 1
+        print('ERROR', file=sys.stderr)
+        e.print_error()
+        sys.exit(1)
 
     if not args.quiet:
         print('Imported entry:')
-        print_entries(imported, file=sys.stdout)
+        print_entries([entry], file=sys.stdout)
 
-    sys.exit(ret)
+sys.exit(0)
