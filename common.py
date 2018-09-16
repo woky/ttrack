@@ -4,7 +4,13 @@ import dateutil.tz as dutz
 from dateutil.relativedelta import *
 import sys, typing
 import csv
-from itertools import groupby
+from collections import defaultdict
+
+def group_by(iterable, f):
+    results = defaultdict(list)
+    for x in iterable:
+        results[f(x)].append(x)
+    return sorted(results.items())
 
 def open_default_db():
     return Database('db.sqlite3')
@@ -66,12 +72,15 @@ class DayHours(typing.NamedTuple):
         return dict([
             (d, [
                 DayHours(c, p, d, sum(
-                    [ e.end - e.start for e in cpd_es ],
-                    dt.timedelta()))
-                for (c, p), cpd_es in
-                groupby(d_es, lambda e: (e.client, e.project)) ])
-            for d, d_es in
-            groupby(entries, lambda e: e.start.date()) ])
+                    [ e.end - e.start for e in proj_entries ],
+                    dt.timedelta())
+                )
+                for (c, p), proj_entries in
+                    group_by(date_entries, lambda e: (e.client, e.project))
+            ])
+            for d, date_entries in
+                group_by(entries, lambda e: e.start.date())
+        ])
 
 class OverlappingEntriesError(Exception):
 
