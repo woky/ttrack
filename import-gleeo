@@ -26,7 +26,7 @@ with open_default_db() as d, fileinput.input(args.files) as input:
         end   = dt.datetime.fromisoformat(end_txt).astimezone(tz)
         entry = Entry(client, project, start, end)
         try:
-            entry = d.add_entry(entry)
+            entry = d.add_entry(entry, add_project=True)
             if args.quiet < 2:
                 num_imported += 1
                 if args.quiet < 1:

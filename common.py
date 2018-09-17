@@ -199,11 +199,18 @@ class Database:
                    datetime(end)   > datetime(?)''',
                 [ end, start ])
 
-    def add_entry(self, entry, force=False):
-        if not force:
+    def add_entry(self, entry, ignore_overlaps=False, add_project=False):
+        if not ignore_overlaps:
             existing = self.get_overlapping_entries(entry.start, entry.end)
             if existing:
                 raise OverlappingEntriesError(entry, existing)
+        if add_project:
+            self.db.execute(
+                    'insert or ignore into clients (id) values (?)',
+                    [entry.client])
+            self.db.execute(
+                    'insert or ignore into projects (id, client) values (?,?)',
+                    [entry.project, entry.client])
         c = self.db.cursor()
         try:
             c.execute('''
