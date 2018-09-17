@@ -7,7 +7,7 @@ import dateutil.tz as dutz
 from common import *
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--silence-warnings', '-S', action='store_true')
+parser.add_argument('--silence-warnings', '-W', action='store_true')
 parser.add_argument('--quiet',            '-q', action='count', default=0)
 parser.add_argument('files', nargs='*')
 args = parser.parse_args()

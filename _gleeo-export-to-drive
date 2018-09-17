@@ -1,0 +1,2 @@
+#!/bin/zsh
+rclone copyto =(./export-gleeo) drive:gleeo-import.csv
