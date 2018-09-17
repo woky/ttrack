@@ -1,2 +1,2 @@
 #!/bin/zsh
-rclone cat drive:gleeo-export.csv | ./import-gleeo -W
+rclone cat drive:gleeo-export.csv | ./import-gleeo "$@"

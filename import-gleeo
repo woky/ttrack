@@ -18,8 +18,10 @@ with open_default_db() as d, fileinput.input(args.files) as input:
     reader = csv.reader(input)
     next(reader, None)
     imported = []
+    num_read = 0
     num_imported = 0
     for line in reader:
+        num_read += 1
         client, project, _, _, start_txt, end_txt, tz_txt, *_ = line
         tz    = dutz.gettz(tz_txt)
         start = dt.datetime.fromisoformat(start_txt).astimezone(tz)
@@ -39,7 +41,7 @@ with open_default_db() as d, fileinput.input(args.files) as input:
             ret = 1
 
     if args.quiet < 2:
-        print('Imported {} entries'.format(num_imported))
+        print('Imported {}/{} entries'.format(num_imported, num_read))
         if num_imported and args.quiet < 1:
             print_entries(imported, file=sys.stdout)
 

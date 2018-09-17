@@ -52,9 +52,7 @@ with open_default_db() as db:
     entry = Entry(client, project, dt1, dt2, args.extra)
 
     try:
-        entry = db.add_entry(entry,
-                ignore_overlaps = args.force,
-                add_project     = args.force)
+        entry = db.add_entry(entry, add_project = args.force)
     except OverlappingEntriesError as e:
         print('ERROR', file=sys.stderr)
         e.print_error()

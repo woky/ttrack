@@ -192,16 +192,17 @@ class Database:
         #print(query); print(args)
         return self.get_entries_for_query(query, args)
 
-    def get_overlapping_entries(self, start, end):
+    def get_overlapping_entries(self, entry):
         return self.get_entries_for_query(
                 '''select * from entries where
                    datetime(start) < datetime(?) and
-                   datetime(end)   > datetime(?)''',
-                [ end, start ])
+                   datetime(end)   > datetime(?) and
+                   client = ? and project = ?''',
+                [ entry.end, entry.start, entry.client, entry.project ])
 
     def add_entry(self, entry, ignore_overlaps=False, add_project=False):
         if not ignore_overlaps:
-            existing = self.get_overlapping_entries(entry.start, entry.end)
+            existing = self.get_overlapping_entries(entry)
             if existing:
                 raise OverlappingEntriesError(entry, existing)
         if add_project:
