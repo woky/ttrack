@@ -27,17 +27,24 @@ parser.add_argument('--split-months', '-M', action='store_true')
 parser.add_argument('--totals',       '-t', action='store_true')
 args = parser.parse_args()
 
-def format_hours(delta):
+def delta_to_hours(delta):
     t_s = int(delta.total_seconds())
-    if t_s > 0 or args.show_zeros:
-        h = round(t_s / 3600, 2)
-        m = int(round((t_s % 3600) / 60, 0))
-        h_dec = '{:.2f}'.format(h)
-        h_min = '{:2}:{:02}'.format(int(h), m)
+    h = t_s / 3600
+    m = int(round((t_s % 3600) / 60, 0))
+    return h, m
+
+def format_hours_dec(h): return '{:.2f}'.format(round(h, 2))
+def format_hours_h_mm(h, m): return '{:2}:{:02}'.format(int(h), m)
+def format_hours_hm(h, m):  return '{}h {}m'.format(int(h), m)
+
+def format_delta_for_row(delta):
+    if args.show_zeros or delta.total_seconds() > 0:
+        hh, mm = delta_to_hours(delta)
+        hd  = format_hours_dec(hh)
+        hmm = format_hours_h_mm(hh, mm)
+        return hd, hmm
     else:
-        h_dec = ''
-        h_min = ''
-    return (h_dec, h_min)
+        return '', ''
 
 Column = namedtuple('Column', [ 'name', 'alignment' ])
 columns = dict([ (c.name, c) for c in [
@@ -113,10 +120,11 @@ class Printer:
         print(tabulate(rows, **kwargs))
 
         if args.totals:
-            hours = sum([ self.elem_to_delta(e) for e in elems ], dt.timedelta())
-            (h_dec, h_min) = format_hours(hours)
-            print('Total hours = {} / {}'.format(h_dec, h_min))
-
+            delta = sum([ self.elem_to_delta(e) for e in elems ], dt.timedelta())
+            hh, mm = delta_to_hours(delta)
+            hd = format_hours_dec(hh)
+            hm = format_hours_hm(hh, mm)
+            print('Total hours = {} ({})'.format(hd, hm))
 
     def print_csv(self, elems):
         writer = csv.writer(sys.stdout)
@@ -136,7 +144,7 @@ ENTRIES_COLUMNS  = 'Id,Date,CW,DoW,In,Out,Hours,H:MM,Client,Project,Extra'.split
 DAYHOURS_COLUMNS = 'Date,CW,DoW,Hours,H:MM,Client,Project'.split(',')
 
 def create_row_entry(e):
-    (h_dec, h_min) = format_hours(e.end - e.start)
+    hd, hmm = format_delta_for_row(e.end - e.start)
     return [
         e.id,
         e.start.date(),
@@ -144,21 +152,21 @@ def create_row_entry(e):
         e.start.strftime('%a'),
         e.start.strftime('%H:%M'),
         e.end.strftime('%H:%M'),
-        h_dec,
-        h_min,
+        hd,
+        hmm,
         e.client,
         e.project,
         e.extra
     ]
 
 def create_row_dayhours(dh):
-    (h_dec, h_min) = format_hours(dh.hours)
+    hd, hmm = format_delta_for_row(dh.hours)
     return [
         dh.date,
         dh.date.strftime('%V'),
         dh.date.strftime('%a'),
-        h_dec,
-        h_min,
+        hd,
+        hmm,
         dh.client,
         dh.project
     ]
