@@ -20,9 +20,11 @@ with open_default_db() as d, fileinput.input(args.files) as input:
     imported = []
     num_read = 0
     num_imported = 0
-    for line in reader:
+    for row in reader:
+        if not row:
+            continue
         num_read += 1
-        client, project, _, _, start_txt, end_txt, tz_txt, *_ = line
+        client, project, _, _, start_txt, end_txt, tz_txt, *_ = row
         tz    = dutz.gettz(tz_txt)
         start = dt.datetime.fromisoformat(start_txt).astimezone(tz)
         end   = dt.datetime.fromisoformat(end_txt).astimezone(tz)
