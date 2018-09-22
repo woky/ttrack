@@ -53,9 +53,9 @@ with open_default_db() as db:
 
     try:
         entry = db.add_entry(entry, add_project = args.force)
-    except OverlappingEntriesError as e:
-        print('ERROR', file=sys.stderr)
-        e.print_error()
+    except OverlappingEntryError as e:
+        print('ERROR', e, file=sys.stderr)
+        e.print_overlapping_entries()
         sys.exit(1)
 
     if not args.quiet:

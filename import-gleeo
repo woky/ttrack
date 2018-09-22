@@ -33,10 +33,10 @@ with open_default_db() as d, fileinput.input(args.files) as input:
                 num_imported += 1
                 if args.quiet < 1:
                     imported.append(entry)
-        except OverlappingEntriesError as e:
+        except OverlappingEntryError as e:
             if not args.silence_warnings:
-                print('WARNING', file=sys.stderr)
-                e.print_error()
+                print('WARNING', e, file=sys.stderr)
+                e.print_overlapping_entries()
                 print(file=sys.stderr)
             ret = 1
 

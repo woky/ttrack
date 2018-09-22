@@ -82,18 +82,16 @@ class DayHours(typing.NamedTuple):
                 group_by(entries, lambda e: e.start.date())
         ])
 
-class OverlappingEntriesError(Exception):
+class OverlappingEntryError(Exception):
 
-    def __init__(self, new_entry, existing):
-        super().__init__('Overlapping entries')
+    def __init__(self, new_entry, existing_entries):
+        super().__init__('Overlapping entry')
         self.new_entry = new_entry
-        self.existing = existing
+        self.existing_entries = existing_entries
 
-    def print_error(self, file=sys.stderr):
-        print('New entry:', file=file)
-        print_entries([self.new_entry])
-        print('Overlapping entries:', file=file)
-        print_entries(self.existing)
+    def print_overlapping_entries(self, file=sys.stderr):
+        rows = [self.new_entry] + self.existing_entries
+        print_entries(rows, file=file)
 
 class Database:
 
@@ -204,7 +202,7 @@ class Database:
         if not ignore_overlaps:
             existing = self.get_overlapping_entries(entry)
             if existing:
-                raise OverlappingEntriesError(entry, existing)
+                raise OverlappingEntryError(entry, existing)
         if add_project:
             self.db.execute(
                     'insert or ignore into clients (id) values (?)',
