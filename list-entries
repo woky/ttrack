@@ -25,6 +25,7 @@ parser.add_argument('--show-zeros',   '-z', action='store_true')
 parser.add_argument('--split-weeks',  '-W', action='store_true')
 parser.add_argument('--split-months', '-M', action='store_true')
 parser.add_argument('--totals',       '-t', action='store_true')
+parser.add_argument('--merge-splits', '-e', action='store_true')
 args = parser.parse_args()
 
 def delta_to_hours(delta):
@@ -205,6 +206,8 @@ with open_default_db() as db:
             client = args.project
 
     entries = db.get_entries(client, project, months, weeks)
+    if args.merge_splits:
+        entries = Entry.merge_splits(entries)
 
     if args.day_hours:
         dayhours_by_date = DayHours.from_entries(entries)

@@ -61,6 +61,23 @@ class Entry(typing.NamedTuple):
         for e in entries:
             writer.writerow(e.to_row())
 
+    @classmethod
+    def merge_splits(cls, entries):
+        new_entries = []
+        last_entry = None
+        for entry in entries:
+            if last_entry and last_entry.end == entry.start and \
+                    last_entry.client  == entry.client and \
+                    last_entry.project == entry.project:
+                last_entry = last_entry._replace(end = entry.end)
+            else:
+                if last_entry:
+                    new_entries.append(last_entry)
+                last_entry = entry._replace(id=None)
+        if last_entry:
+            new_entries.append(last_entry)
+        return new_entries
+
     def to_row(self):
         return [ self._asdict()[attr] for attr in _CSV_COLUMNS ]
 
