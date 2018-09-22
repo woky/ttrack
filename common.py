@@ -1,3 +1,6 @@
+# This file is subject to GPLv3 license. See file COPYING for license details.
+# Copyright 2018 woky
+
 import sqlite3
 import datetime as dt
 import dateutil.tz as dutz

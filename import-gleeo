@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# This file is subject to GPLv3 license. See file COPYING for license details.
+# Copyright 2018 woky
 
 import argparse
 import sys, fileinput, csv
