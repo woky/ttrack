@@ -8,7 +8,7 @@ import datetime as dt
 import calendar
 import itertools
 from dateutil.relativedelta import *
-from tabulate import tabulate
+from tabulate import tabulate, TableFormat, Line, DataRow
 from common import *
 from collections import namedtuple
 
@@ -54,6 +54,16 @@ columns = dict([ (c.name, c) for c in [
     Column('Extra',   'left'),
 ]])
 
+tablefmt = TableFormat(
+        lineabove        = None,
+        linebelowheader  = Line('', '-', '  ', ''),
+        linebetweenrows  = None,
+        linebelow        = Line('', '-', '--', ''),
+        headerrow        = DataRow('', '  ', ''),
+        datarow          = DataRow('', '  ', ''),
+        padding          = 0,
+        with_header_hide = None)
+
 class Printer:
 
     def __init__(self, all_col_names, req_col_names, elem_to_row, elem_to_date, elem_to_delta):
@@ -93,6 +103,10 @@ class Printer:
         kwargs = {}
         kwargs['floatfmt'] = '.2f'
         kwargs['headers'] = self.header
+        if args.totals:
+            kwargs['tablefmt'] = tablefmt
+        else:
+            kwargs['tablefmt'] = tablefmt._replace(linebelow=None)
         # https://bitbucket.org/astanin/python-tabulate/issues/155
         if rows:
             kwargs['colalign'] = [ columns[n].alignment for n in self.header ]
@@ -101,7 +115,6 @@ class Printer:
         if args.totals:
             hours = sum([ self.elem_to_delta(e) for e in elems ], dt.timedelta())
             (h_dec, h_min) = format_hours(hours)
-            print()
             print('Total hours = {} / {}'.format(h_dec, h_min))
 
 
