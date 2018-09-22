@@ -26,14 +26,14 @@ with open_default_db() as db:
     elif args.date_hours:
         d = dt.date.fromisoformat(args.date_hours[0])
         if '+' in args.date_hours[1]:
-            t1_str, d_t_str = args.date_hours[1].split('+')
+            t1_str, td_str = args.date_hours[1].split('+')
             t1  = dt.datetime.strptime(t1_str, '%H:%M').time()
             dt1 = dt.datetime.combine(d, t1)
-            if ':' in d_t_str:
-                (d_h, d_m) = (int(s or 0) for s in d_t_str.split(':'))
-                dt2 = dt1 + dt.timedelta(hours=d_h, minutes=d_m)
+            if ':' in td_str:
+                (td_h, td_m) = (int(s or 0) for s in td_str.split(':'))
+                dt2 = dt1 + dt.timedelta(hours=td_h, minutes=td_m)
             else:
-                dt2 = dt1 + dt.timedelta(hours=float(d_t_str))
+                dt2 = dt1 + dt.timedelta(hours=float(td_str))
         else:
             t1_str, t2_str = args.date_hours[1].split('-')
             t1  = dt.datetime.strptime(t1_str, '%H:%M').time()

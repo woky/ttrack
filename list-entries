@@ -71,16 +71,16 @@ class Printer:
         rows = []
         for e1, e2 in itertools.zip_longest(elems, elems[1:]):
             rows.append(self.project_row(self.elem_to_row(e1)))
-            separated = False
             if not e2:
                 continue
-            if args.split_weeks and not separated:
+            separated = False
+            if args.split_weeks:
                 w1 = self.elem_to_date(e1).isocalendar()[1]
                 w2 = self.elem_to_date(e2).isocalendar()[1]
                 if w1 != w2:
                     rows.append([])
                     separated = True
-            if args.split_months and not separated:
+            if not separated and args.split_months:
                 m1 = self.elem_to_date(e1).month
                 m2 = self.elem_to_date(e2).month
                 if m1 != m2:
