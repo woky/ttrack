@@ -20,6 +20,7 @@ with open_default_db() as d, fileinput.input(args.files) as input:
     imported = []
     num_read = 0
     num_imported = 0
+    num_dups = 0
     for row in reader:
         if not row:
             continue
@@ -31,20 +32,24 @@ with open_default_db() as d, fileinput.input(args.files) as input:
         entry = Entry(client, project, start, end)
         try:
             entry = d.add_entry(entry, add_project=True)
-            if args.quiet < 2:
-                num_imported += 1
-                if args.quiet < 1:
-                    imported.append(entry)
+            num_imported += 1
+            if args.quiet < 1:
+                imported.append(entry)
         except OverlappingEntryError as e:
-            if not args.silence_warnings:
+            if e.is_duplicate():
+                num_dups += 1
+            elif not args.silence_warnings:
                 print('WARNING', e, file=sys.stderr)
                 e.print_overlapping_entries()
                 print(file=sys.stderr)
             ret = 1
 
     if args.quiet < 2:
-        print('Imported {}/{} entries'.format(num_imported, num_read))
-        if num_imported and args.quiet < 1:
+        num_err = num_read - num_imported - num_dups
+        print('    Errors: {:5} / {}'.format(num_err, num_read))
+        print('Duplicates: {:5} / {}'.format(num_dups, num_read))
+        print('  Imported: {:5} / {}'.format(num_imported, num_read))
+        if args.quiet < 1 and num_imported:
             print_entries(imported, file=sys.stdout)
 
 sys.exit(ret)

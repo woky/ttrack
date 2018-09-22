@@ -89,6 +89,13 @@ class OverlappingEntryError(Exception):
         self.new_entry = new_entry
         self.existing_entries = existing_entries
 
+    def is_duplicate(self):
+        if len(self.existing_entries) != 1:
+            return False
+        e1 = self.new_entry
+        e2 = self.existing_entries[0]
+        return e1.start == e2.start and e1.end == e2.end
+
     def print_overlapping_entries(self, file=sys.stderr):
         rows = [self.new_entry] + self.existing_entries
         print_entries(rows, file=file)
